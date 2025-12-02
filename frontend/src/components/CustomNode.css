@@ -1,0 +1,31 @@
+.custom-node {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  min-width: 200px;
+  color: #e0e0e0;
+}
+
+.custom-node.selected {
+  border-color: #4a9eff;
+  box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+}
+
+.node-header {
+  padding: 0.75rem;
+  background: #252525;
+  border-bottom: 1px solid #333;
+  border-radius: 8px 8px 0 0;
+}
+
+.node-header h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0;
+}
+
+.node-content {
+  padding: 0.75rem;
+}
+

@@ -1,0 +1,74 @@
+.result-node {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  min-width: 250px;
+  color: #e0e0e0;
+}
+
+.result-node.selected {
+  border-color: #4a9eff;
+  box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+}
+
+.node-header {
+  padding: 0.75rem;
+  background: #252525;
+  border-bottom: 1px solid #333;
+  border-radius: 8px 8px 0 0;
+}
+
+.node-header h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0;
+}
+
+.node-content {
+  padding: 0.75rem;
+}
+
+.result-preview {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #333;
+}
+
+.result-preview img {
+  width: 100%;
+  height: auto;
+  display: block;
+  max-height: 200px;
+  object-fit: contain;
+}
+
+.no-result {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.no-result p {
+  margin: 0;
+}
+
+.click-hint {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 0.5rem;
+  right: 0.5rem;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.result-preview {
+  position: relative;
+}
+

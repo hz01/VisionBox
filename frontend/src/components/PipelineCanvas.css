@@ -1,0 +1,48 @@
+.pipeline-canvas {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.canvas-header {
+  padding: 1rem;
+  background: #1a1a1a;
+  border-bottom: 1px solid #333;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.canvas-header h2 {
+  font-size: 1.2rem;
+  color: #fff;
+}
+
+.react-flow-container {
+  flex: 1;
+  background: #0f0f0f;
+}
+
+.react-flow__node {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  color: #e0e0e0;
+}
+
+.react-flow__node.selected {
+  border-color: #4a9eff;
+}
+
+.react-flow__handle {
+  background: #4a9eff;
+}
+
+.react-flow__edge {
+  stroke: #4a9eff;
+}
+
+.react-flow__edge.selected {
+  stroke: #6bb6ff;
+}
+
