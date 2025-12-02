@@ -4,6 +4,7 @@ export interface CVModule {
   description: string
   category: string
   parameters: ModuleParameter[]
+  allowMultipleInputs?: boolean // If true, node can accept multiple input connections
 }
 
 export interface ModuleParameter {

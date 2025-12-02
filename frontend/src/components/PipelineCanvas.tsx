@@ -115,6 +115,46 @@ function PipelineCanvas({ selectedImage, onResultChange, onOpenResultPanel }: Pi
     [removeEdge]
   )
 
+  // Validate connections - prevent multiple inputs unless node allows it
+  const { modules } = usePipelineStore()
+  const isValidConnection = useCallback(
+    (connection: Connection) => {
+      if (!connection.source || !connection.target) return false
+      
+      // Check if target already has an incoming connection
+      const targetNode = nodes.find(n => n.id === connection.target)
+      if (!targetNode) return false
+      
+      // Image upload nodes should not have inputs
+      if (targetNode.type === 'imageUpload') return false
+      
+      // Check if target already has incoming edges
+      const hasIncomingEdge = edges.some(e => e.target === connection.target)
+      
+      // Check if the module allows multiple inputs
+      let allowsMultiple = false
+      if (targetNode.type === 'custom' && targetNode.data.moduleId) {
+        const module = modules.find(m => m.id === targetNode.data.moduleId)
+        if (module && module.allowMultipleInputs) {
+          allowsMultiple = true
+        }
+      }
+      
+      // If node already has an input and doesn't allow multiple, reject
+      if (hasIncomingEdge && !allowsMultiple) {
+        return false
+      }
+      
+      // Prevent self-connections
+      if (connection.source === connection.target) {
+        return false
+      }
+      
+      return true
+    },
+    [nodes, edges, modules]
+  )
+
   return (
     <div className="pipeline-canvas">
       <div className="canvas-header">
@@ -134,6 +174,7 @@ function PipelineCanvas({ selectedImage, onResultChange, onOpenResultPanel }: Pi
         onConnect={onConnect}
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
+        isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
         nodesDraggable={true}
         nodesConnectable={true}
