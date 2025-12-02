@@ -6,23 +6,25 @@ import './ExecuteButton.css'
 
 interface ExecuteButtonProps {
   selectedImage: string | null
-  getPipelineSteps: () => import('../types').PipelineStep[]
   onResultChange: (result: string | null) => void
-  onOpenResultPanel?: (image: string | null) => void
 }
 
-function ExecuteButton({ selectedImage, getPipelineSteps, onResultChange, onOpenResultPanel }: ExecuteButtonProps) {
+function ExecuteButton({ selectedImage, onResultChange }: ExecuteButtonProps) {
   const [isExecuting, setIsExecuting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { getImageUploadNode, nodes, updateNode, getPathToNode, getPipelineStepsForPath } = usePipelineStore()
+  const { getImageUploadNode, getGenerationNode, nodes, edges, updateNode, getPathToNode, getPipelineStepsForPath } = usePipelineStore()
 
   const handleExecute = async () => {
-    // Get image from upload node or fallback to selectedImage prop
+    // Get image from upload node, generation node, or fallback to selectedImage prop
     const imageUploadNode = getImageUploadNode()
+    const generationNode = getGenerationNode()
+    
+    // For generation nodes, we'll generate the image during execution
+    // For now, check if we have an image source
     const imageData = imageUploadNode?.data.imageData || selectedImage
 
-    if (!imageData) {
-      setError('Please upload an image first (add Image Upload node)')
+    if (!imageData && !generationNode) {
+      setError('Please upload an image (add Image Upload node) or add a Generation node')
       return
     }
 
@@ -30,28 +32,47 @@ function ExecuteButton({ selectedImage, getPipelineSteps, onResultChange, onOpen
     setError(null)
 
     try {
-      // Convert data URL to File
-      const base64Data = imageData.split(',')[1]
-      const byteCharacters = atob(base64Data)
-      const byteNumbers = new Array(byteCharacters.length)
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i)
+      // Check if we have a source (image upload or generation node)
+      if (!imageData && !generationNode) {
+        setError('Please upload an image (add Image Upload node) or add a Generation node')
+        setIsExecuting(false)
+        return
       }
-      const byteArray = new Uint8Array(byteNumbers)
-      const blob = new Blob([byteArray], { type: 'image/png' })
-      const file = new File([blob], 'image.png', { type: 'image/png' })
-
-      // Get all result and save nodes
-      const resultNodes = nodes.filter(n => n.type === 'result' || n.type === 'save')
       
-      if (resultNodes.length === 0) {
+      // Convert image data to File if we have it (for non-generation pipelines)
+      let file: File | null = null
+      if (imageData) {
+        const base64Data = imageData.split(',')[1]
+        const byteCharacters = atob(base64Data)
+        const byteNumbers = new Array(byteCharacters.length)
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i)
+        }
+        const byteArray = new Uint8Array(byteNumbers)
+        const blob = new Blob([byteArray], { type: 'image/png' })
+        file = new File([blob], 'image.png', { type: 'image/png' })
+      }
+
+      // Get all result and save nodes (endpoints)
+      // An endpoint is a save node or a result node with no outgoing edges
+      const endpointNodes = nodes.filter(n => {
+        if (n.type === 'save') return true
+        if (n.type === 'result') {
+          // Result node is an endpoint if it has no outgoing edges
+          const hasOutput = edges.some(e => e.source === n.id)
+          return !hasOutput
+        }
+        return false
+      })
+      
+      if (endpointNodes.length === 0) {
         setError('Please add at least one Result Viewer or Save node')
         setIsExecuting(false)
         return
       }
 
-      // Execute pipeline for each result/save node separately
-      const executionPromises = resultNodes.map(async (node) => {
+      // Execute pipeline for each endpoint node separately
+      const executionPromises = endpointNodes.map(async (node) => {
         // Find path from image upload to this node
         const path = getPathToNode(node.id)
         
@@ -60,10 +81,13 @@ function ExecuteButton({ selectedImage, getPipelineSteps, onResultChange, onOpen
           return { nodeId: node.id, success: false, error: 'No path from image upload to this node' }
         }
 
-        // Get pipeline steps for this path
+        // Get pipeline steps for this path (includes nodes up to and through result nodes)
         const pipeline = getPipelineStepsForPath(path)
         
-        if (pipeline.length === 0 && path.length === 2) {
+        // Check if this is a generation pipeline
+        const isGenerationPipeline = pipeline.length > 0 && pipeline[0].module === 'gan_generation'
+        
+        if (pipeline.length === 0 && path.length === 2 && imageData) {
           // Direct connection from image upload to result (no processing)
           // Just use the original image
           return { 
@@ -72,14 +96,38 @@ function ExecuteButton({ selectedImage, getPipelineSteps, onResultChange, onOpen
             image_base64: imageData 
           }
         }
+        
+        if (pipeline.length === 0) {
+          return { nodeId: node.id, success: false, error: 'No processing steps in pipeline' }
+        }
 
         try {
-          const result = await pipelineApi.execute(file, pipeline)
+          // For generation pipelines, file can be null
+          const result = await pipelineApi.execute(isGenerationPipeline ? null : file, pipeline)
+          
+          // Update all result nodes in the path (not just the endpoint)
+          const resultNodesInPath = path
+            .map(nodeId => nodes.find(n => n.id === nodeId))
+            .filter(n => n && n.type === 'result')
+          
+          // Update each result node in the path
+          resultNodesInPath.forEach(resultNode => {
+            if (resultNode) {
+              updateNode(resultNode.id, {
+                data: {
+                  ...resultNode.data,
+                  imageData: result.image_base64,
+                },
+              })
+            }
+          })
+          
           return {
             nodeId: node.id,
             success: result.success,
             image_base64: result.image_base64,
-            errors: result.errors
+            errors: result.errors,
+            updatedNodes: resultNodesInPath.map(n => n?.id).filter(Boolean) as string[]
           }
         } catch (err: any) {
           return {

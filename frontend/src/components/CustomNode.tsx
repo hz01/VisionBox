@@ -61,6 +61,10 @@ function CustomNode({ id, data, selected }: NodeProps) {
     e.stopPropagation()
   }, [])
 
+  // Check if this is a generation module (doesn't need input)
+  const module = modules.find(m => m.id === data.moduleId)
+  const isGenerationModule = module?.category === 'generation'
+
   return (
     <div 
       className={`custom-node ${selected ? 'selected' : ''}`}
@@ -72,7 +76,7 @@ function CustomNode({ id, data, selected }: NodeProps) {
         }
       }}
     >
-      <Handle type="target" position={Position.Top} />
+      {!isGenerationModule && <Handle type="target" position={Position.Top} />}
       <div className="node-header">
         <h3>{data.moduleName}</h3>
       </div>

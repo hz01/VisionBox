@@ -35,7 +35,6 @@ function PipelineCanvas({ selectedImage, onResultChange, onOpenResultPanel }: Pi
     addEdge: addStoreEdge,
     removeNode,
     removeEdge,
-    getPipelineSteps,
   } = usePipelineStore()
 
   // Memoize nodeTypes to prevent recreation on every render
@@ -128,6 +127,14 @@ function PipelineCanvas({ selectedImage, onResultChange, onOpenResultPanel }: Pi
       // Image upload nodes should not have inputs
       if (targetNode.type === 'imageUpload') return false
       
+      // Generation nodes should not have inputs (they generate their own images)
+      if (targetNode.type === 'custom' && targetNode.data.moduleId) {
+        const module = modules.find(m => m.id === targetNode.data.moduleId)
+        if (module && module.category === 'generation') {
+          return false
+        }
+      }
+      
       // Check if target already has incoming edges
       const hasIncomingEdge = edges.some(e => e.target === connection.target)
       
@@ -161,9 +168,7 @@ function PipelineCanvas({ selectedImage, onResultChange, onOpenResultPanel }: Pi
         <h2>Pipeline Canvas</h2>
         <ExecuteButton
           selectedImage={selectedImage}
-          getPipelineSteps={getPipelineSteps}
           onResultChange={onResultChange}
-          onOpenResultPanel={onOpenResultPanel}
         />
       </div>
       <ReactFlow

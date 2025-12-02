@@ -14,6 +14,9 @@ from models.schemas import (
 from services.pipeline_service import PipelineService
 from services.module_service import ModuleService
 from utils.image_utils import file_to_numpy, validate_image
+from utils.model_manager import (
+    get_available_models, get_model_info, download_model, is_model_cached
+)
 from core.module_registry import ModuleRegistry
 from core.pipeline_executor import PipelineExecutor
 
@@ -84,43 +87,18 @@ async def validate_pipeline(
 
 @router.post("/pipeline/execute", response_model=PipelineResponse)
 async def execute_pipeline(
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
     pipeline: Optional[str] = Form(None),
     service: PipelineService = Depends(get_pipeline_service)
 ):
-    """Execute a pipeline on an uploaded image
+    """Execute a pipeline on an uploaded image or generate from scratch
     
-    Pipeline should be sent as a JSON string in the 'pipeline' form field
+    Pipeline should be sent as a JSON string in the 'pipeline' form field.
+    If no file is provided, the first step must be a generation module.
     """
     error_detail = None
     try:
-        # Read and decode image
-        file_bytes = await file.read()
-        
-        if not file_bytes:
-            error_detail = "No file uploaded or file is empty"
-            logger.error(error_detail)
-            raise HTTPException(status_code=400, detail=error_detail)
-        
-        try:
-            image = file_to_numpy(file_bytes)
-        except ValueError as e:
-            error_detail = f"Invalid image file: {str(e)}"
-            logger.error(error_detail)
-            raise HTTPException(status_code=400, detail=error_detail)
-        except Exception as e:
-            error_detail = f"Error processing image: {str(e)}"
-            logger.error(error_detail, exc_info=True)
-            raise HTTPException(status_code=400, detail=error_detail)
-        
-        # Validate image
-        is_valid, error_msg = validate_image(image)
-        if not is_valid:
-            error_detail = f"Invalid image: {error_msg}"
-            logger.error(error_detail)
-            raise HTTPException(status_code=400, detail=error_detail)
-        
-        # Parse pipeline
+        # Parse pipeline first to check if it starts with a generation module
         import json
         if not pipeline:
             error_detail = "Pipeline is required"
@@ -141,6 +119,52 @@ async def execute_pipeline(
             error_detail = str(e)
             logger.error(f"Pipeline validation error: {error_detail}")
             raise HTTPException(status_code=400, detail=error_detail)
+        
+        # Check if first step is a generation module
+        is_generation_pipeline = False
+        if pipeline_data and len(pipeline_data) > 0:
+            first_module_id = pipeline_data[0].get("module", "")
+            # Check if it's a generation module (gan_generation)
+            if first_module_id == "gan_generation":
+                is_generation_pipeline = True
+        
+        # Handle image input
+        if is_generation_pipeline:
+            # For generation pipelines, create a dummy image (will be ignored by GAN module)
+            import numpy as np
+            image = np.zeros((1, 1, 3), dtype=np.uint8)
+        else:
+            # For regular pipelines, require a file
+            if not file:
+                error_detail = "File is required for non-generation pipelines"
+                logger.error(error_detail)
+                raise HTTPException(status_code=400, detail=error_detail)
+            
+            # Read and decode image
+            file_bytes = await file.read()
+            
+            if not file_bytes:
+                error_detail = "No file uploaded or file is empty"
+                logger.error(error_detail)
+                raise HTTPException(status_code=400, detail=error_detail)
+            
+            try:
+                image = file_to_numpy(file_bytes)
+            except ValueError as e:
+                error_detail = f"Invalid image file: {str(e)}"
+                logger.error(error_detail)
+                raise HTTPException(status_code=400, detail=error_detail)
+            except Exception as e:
+                error_detail = f"Error processing image: {str(e)}"
+                logger.error(error_detail, exc_info=True)
+                raise HTTPException(status_code=400, detail=error_detail)
+            
+            # Validate image
+            is_valid, error_msg = validate_image(image)
+            if not is_valid:
+                error_detail = f"Invalid image: {error_msg}"
+                logger.error(error_detail)
+                raise HTTPException(status_code=400, detail=error_detail)
         
         # Execute pipeline
         result = service.execute_pipeline(image, pipeline_data)
@@ -201,4 +225,55 @@ async def execute_pipeline_json(
     except Exception as e:
         logger.error(f"Error executing pipeline: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get("/models/gan")
+async def get_gan_models():
+    """Get list of available GAN models and their status"""
+    try:
+        models = get_available_models()
+        return {"models": models}
+    except Exception as e:
+        logger.error(f"Error getting GAN models: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/models/gan/{model_id}")
+async def get_gan_model_info(model_id: str):
+    """Get information about a specific GAN model"""
+    try:
+        model_info = get_model_info(model_id)
+        if not model_info:
+            raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found")
+        return model_info
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting model info for {model_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/models/gan/{model_id}/download")
+async def download_gan_model(model_id: str):
+    """Download and cache a GAN model"""
+    try:
+        if is_model_cached(model_id):
+            model_info = get_model_info(model_id)
+            return {
+                "status": "cached",
+                "message": f"Model {model_id} is already cached",
+                "path": model_info.get("path")
+            }
+        
+        model_path = download_model(model_id)
+        return {
+            "status": "downloaded",
+            "message": f"Model {model_id} downloaded successfully",
+            "path": str(model_path)
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error downloading model {model_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 

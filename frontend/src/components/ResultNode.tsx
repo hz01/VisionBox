@@ -30,6 +30,7 @@ function ResultNode({ id, data, selected, onOpenResultPanel }: ResultNodeProps) 
           </div>
         )}
       </div>
+      <Handle type="source" position={Position.Bottom} />
     </div>
   )
 }

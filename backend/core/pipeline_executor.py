@@ -67,11 +67,20 @@ class PipelineExecutor:
                 logger.info(f"Executing {module_id} with params: {validated_params}")
                 result = module.process(result, **validated_params)
                 
+                # Check if this is an image_info module and capture metadata
+                metadata = None
+                if module_id == "image_info":
+                    from modules.image_info import ImageInfoModule
+                    if ImageInfoModule.last_info is not None:
+                        metadata = ImageInfoModule.last_info
+                        ImageInfoModule.last_info = None  # Clear after capturing
+                
                 execution_log.append({
                     "step_id": step_id,
                     "module_id": module_id,
                     "success": True,
-                    "params": validated_params
+                    "params": validated_params,
+                    "metadata": metadata
                 })
                 
             except Exception as e:

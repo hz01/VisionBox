@@ -13,7 +13,17 @@ from core.module_registry import ModuleRegistry
 from modules import (
     BlurModule, GaussianBlurModule, EdgeDetectionModule,
     ThresholdModule, GrayscaleModule, ResizeModule,
-    RotateModule, FlipModule, BrightnessModule, ContrastModule
+    RotateModule, FlipModule, BrightnessModule, ContrastModule,
+    FaceDetectionModule, FaceDetectionEyesModule,
+    SIFTFeatureDetectionModule, ORBFeatureDetectionModule, FASTFeatureDetectionModule,
+    MorphologyModule, MorphologyGradientModule,
+    ContourDetectionModule, ContourAnalysisModule,
+    MediaPipeFaceMeshModule, MediaPipeHandsModule, MediaPipePoseModule,
+    MediaPipeHolisticModule, MediaPipeSelfieSegmentationModule,
+    AutoBackgroundRemoverModule, BackgroundRemoverU2NetModule,
+    GANImageGenerationModule,
+    SuperResolutionModule,
+    ImageInfoModule
 )
 
 # Configure logging
@@ -86,6 +96,34 @@ modules_to_register = [
     FlipModule(),
     BrightnessModule(),
     ContrastModule(),
+    # Face detection
+    FaceDetectionModule(),
+    FaceDetectionEyesModule(),
+    # Feature detection
+    SIFTFeatureDetectionModule(),
+    ORBFeatureDetectionModule(),
+    FASTFeatureDetectionModule(),
+    # Morphological operations
+    MorphologyModule(),
+    MorphologyGradientModule(),
+    # Contour detection
+    ContourDetectionModule(),
+    ContourAnalysisModule(),
+    # MediaPipe models
+    MediaPipeFaceMeshModule(),
+    MediaPipeHandsModule(),
+    MediaPipePoseModule(),
+    MediaPipeHolisticModule(),
+    MediaPipeSelfieSegmentationModule(),
+    # Background removal
+    AutoBackgroundRemoverModule(),
+    # BackgroundRemoverU2NetModule(),  # Disabled until implemented
+    # Generation
+    GANImageGenerationModule(),
+    # Enhancement
+    SuperResolutionModule(),
+    # Analysis
+    ImageInfoModule(),
 ]
 
 for module in modules_to_register:

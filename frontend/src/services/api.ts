@@ -28,9 +28,11 @@ export const pipelineApi = {
     return response.data
   },
 
-  execute: async (imageFile: File, pipeline: PipelineStep[]): Promise<{ success: boolean; image_base64: string | null; errors: string[] }> => {
+  execute: async (imageFile: File | null, pipeline: PipelineStep[]): Promise<{ success: boolean; image_base64: string | null; errors: string[] }> => {
     const formData = new FormData()
-    formData.append('file', imageFile)
+    if (imageFile) {
+      formData.append('file', imageFile)
+    }
     formData.append('pipeline', JSON.stringify(pipeline))
 
     try {

@@ -22,6 +22,7 @@ interface PipelineStore {
   loadModules: () => Promise<void>
   getPipelineSteps: () => import('../types').PipelineStep[]
   getImageUploadNode: () => PipelineNode | undefined
+  getGenerationNode: () => PipelineNode | undefined
   getPathToNode: (targetNodeId: string) => string[]
   getPipelineStepsForPath: (path: string[]) => import('../types').PipelineStep[]
 }
@@ -78,8 +79,16 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
   getPipelineSteps: () => {
     const { nodes, edges } = get()
     
-    // Filter out image upload nodes (they're handled separately)
-    const processingNodes = nodes.filter(n => n.type !== 'imageUpload')
+    // Filter out image upload and generation nodes (they're handled separately)
+    const { modules } = get()
+    const processingNodes = nodes.filter(n => {
+      if (n.type === 'imageUpload') return false
+      if (n.type === 'custom' && n.data.moduleId) {
+        const module = modules.find((m: any) => m.id === n.data.moduleId)
+        if (module && module.category === 'generation') return false
+      }
+      return true
+    })
     
     // Build dependency graph to determine execution order
     const nodeMap = new Map(processingNodes.map(n => [n.id, n]))
@@ -145,12 +154,32 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
     return nodes.find(n => n.type === 'imageUpload' && n.data.imageData)
   },
 
+  getGenerationNode: () => {
+    const { nodes, modules } = get()
+    return nodes.find(n => {
+      if (n.type === 'custom' && n.data.moduleId) {
+        const module = modules.find((m: any) => m.id === n.data.moduleId)
+        return module && module.category === 'generation'
+      }
+      return false
+    })
+  },
+
   getPathToNode: (targetNodeId: string) => {
-    const { nodes, edges } = get()
+    const { nodes, edges, modules } = get()
     
-    // Find path from image upload node to target node
+    // Find path from image upload node or generation node to target node
     const imageUploadNode = nodes.find(n => n.type === 'imageUpload' && n.data.imageData)
-    if (!imageUploadNode) return []
+    const generationNode = nodes.find(n => {
+      if (n.type === 'custom' && n.data.moduleId) {
+        const module = modules.find(m => m.id === n.data.moduleId)
+        return module && module.category === 'generation'
+      }
+      return false
+    })
+    
+    const sourceNode = imageUploadNode || generationNode
+    if (!sourceNode) return []
     
     // Build reverse graph (target -> source) to trace back
     const reverseEdges = new Map<string, string[]>()
@@ -161,7 +190,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
       reverseEdges.get(e.target)!.push(e.source)
     })
     
-    // BFS from target to find path to image upload
+    // BFS from target to find path to source node
     const visited = new Set<string>()
     const queue: { nodeId: string; path: string[] }[] = [{ nodeId: targetNodeId, path: [] }]
     
@@ -171,8 +200,8 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
       if (visited.has(nodeId)) continue
       visited.add(nodeId)
       
-      if (nodeId === imageUploadNode.id) {
-        // Found path, reverse it to get correct order (from upload to target)
+      if (nodeId === sourceNode.id) {
+        // Found path, reverse it to get correct order (from source to target)
         return [...currentPath, nodeId].reverse()
       }
       
@@ -192,14 +221,43 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
   },
 
   getPipelineStepsForPath: (path: string[]) => {
-    const { nodes } = get()
+    const { nodes, edges, modules } = get()
     const steps: import('../types').PipelineStep[] = []
     
-    // Skip first (image upload) and last (result/save) nodes
-    for (let i = 1; i < path.length - 1; i++) {
+    // Check if first node is a generation node
+    const firstNode = nodes.find(n => n.id === path[0])
+    const isGenerationPath = firstNode && firstNode.type === 'custom' && firstNode.data.moduleId && 
+      modules.find((m: any) => m.id === firstNode.data.moduleId && m.category === 'generation')
+    
+    // Start from index 0 if it's a generation path, otherwise skip image upload (index 0)
+    const startIndex = isGenerationPath ? 0 : 1
+    
+    // Include all processing nodes, including result nodes if they have outputs
+    for (let i = startIndex; i < path.length; i++) {
       const nodeId = path[i]
       const node = nodes.find(n => n.id === nodeId)
-      if (node && node.data.moduleId) {
+      
+      if (!node) continue
+      
+      // Skip save nodes (they're endpoints)
+      if (node.type === 'save') break
+      
+      // Skip image upload nodes (they're sources, not processing steps)
+      if (node.type === 'imageUpload') continue
+      
+      // Include result nodes only if they have outgoing edges (pass-through)
+      if (node.type === 'result') {
+        const hasOutput = edges.some(e => e.source === nodeId)
+        if (!hasOutput) {
+          // Result node without output is an endpoint
+          break
+        }
+        // Result node with output passes through, continue to next node
+        continue
+      }
+      
+      // Include processing nodes with moduleId (including generation nodes)
+      if (node.data.moduleId) {
         steps.push({
           id: node.id,
           module: node.data.moduleId,
